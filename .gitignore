@@ -1,0 +1,5 @@
+.settings/
+.classpath
+.gitattributes
+.project
+/target/
