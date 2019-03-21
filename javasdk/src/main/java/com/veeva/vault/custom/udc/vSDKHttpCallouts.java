@@ -358,7 +358,7 @@ public class vSDKHttpCallouts {
     	
     	//This is a vault to vault Http Request to the input connection
     	HttpService httpService = ServiceLocator.locate(HttpService.class);
-		HttpRequest request = httpService.newHttpRequest("connection");
+		HttpRequest request = httpService.newHttpRequest(connection);
 
 		//The configured connection provides the full DNS name. 
 		//For the path, you only need to append the API endpoint after the DNS.
