@@ -9,7 +9,7 @@
     <version>1.0-SNAPSHOT</version>
 
     <properties>
-        <vault.sdk.version>[18.3.0-release0, 18.3.0-release1000000]</vault.sdk.version>
+        <vault.sdk.version>[18.3.5-release0, 18.3.5-release1000000]</vault.sdk.version>
     </properties>
 
     <repositories>
