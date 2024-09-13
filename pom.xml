@@ -30,6 +30,12 @@
             <artifactId>vault-sdk</artifactId>
             <version>${vault.sdk.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.veeva.vault.sdk.debugger</groupId>
+            <artifactId>vault-sdk-debugger</artifactId>
+            <version>${vault.sdk.version}</version>
+            <scope>runtime</scope>
+        </dependency>
     </dependencies>
 
     <build>
