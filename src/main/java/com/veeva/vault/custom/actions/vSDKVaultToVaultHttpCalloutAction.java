@@ -11,7 +11,8 @@ import com.veeva.vault.sdk.api.core.ServiceLocator;
 import com.veeva.vault.sdk.api.core.ValueType;
 import com.veeva.vault.sdk.api.core.VaultCollections;
 import com.veeva.vault.sdk.api.document.DocumentVersion;
-import com.veeva.vault.sdk.api.query.QueryResponse;
+import com.veeva.vault.sdk.api.query.QueryExecutionRequest;
+import com.veeva.vault.sdk.api.query.QueryExecutionResponse;
 import com.veeva.vault.sdk.api.query.QueryService;
 
 
@@ -55,17 +56,23 @@ public class vSDKVaultToVaultHttpCalloutAction implements DocumentAction {
     	
     	String query = "select id, (select api_name__sys, remote_connection_id__sys from document_vsdk_connection__cr) from documents where version_id = '" + version_id + "'";
 
-    	QueryResponse queryResponse = queryService.query(query);
-    	
-    	queryResponse.streamResults().forEach(qr -> {
-            QueryResponse subQueryResponse = qr.getSubqueryResponse("document_vsdk_connection__cr");
-            
-            subQueryResponse.streamResults().forEach(subqr -> {
-            	String connection = subqr.getValue("api_name__sys", ValueType.STRING);
-            	String remoteConnectionId = subqr.getValue("remote_connection_id__sys", ValueType.STRING);
-            	vSDKHttpCallouts.v2vHttpQuery(httpParams, connection, remoteConnectionId);
-            });
-        });
+    	QueryExecutionRequest queryRequest = queryService.newQueryExecutionRequestBuilder()
+    			.withQueryString(query)
+    			.build();
+
+    	queryService.query(queryRequest)
+    			.onSuccess(queryResponse -> {
+    	    		queryResponse.streamResults().forEach(qr -> {
+    	                QueryExecutionResponse subQueryResponse = qr.getSubqueryResponse("document_vsdk_connection__cr");
+
+    	                subQueryResponse.streamResults().forEach(subqr -> {
+    	                	String connection = subqr.getValue("api_name__sys", ValueType.STRING);
+    	                	String remoteConnectionId = subqr.getValue("remote_connection_id__sys", ValueType.STRING);
+    	                	vSDKHttpCallouts.v2vHttpQuery(httpParams, connection, remoteConnectionId);
+    	                });
+    	            });
+    			})
+    			.execute();
     }
 
 	public boolean isExecutable(DocumentActionContext documentActionContext) {

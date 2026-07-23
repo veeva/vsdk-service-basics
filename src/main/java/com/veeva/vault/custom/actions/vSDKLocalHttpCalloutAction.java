@@ -69,7 +69,7 @@ public class vSDKLocalHttpCalloutAction implements DocumentAction {
 		
 		GroupService groupService = ServiceLocator.locate(GroupService.class);
 		
-		String currentUserId = RequestContext.get().getCurrentUserId();
+		String currentUserId = RequestContext.get().getInitiatingUserId();
 		GetGroupsResponse groupsResponse = groupService.getGroupsByNames(VaultCollections.asList("vault_owners__v"));
 
 		Group vaultOwner = groupsResponse.getGroupByName("vault_owners__v");
@@ -149,9 +149,11 @@ public class vSDKLocalHttpCalloutAction implements DocumentAction {
 			        	
 			        	logService.info("Create DocumentRoleUpdate for userId {} on role {}.", userId, roleToCheck);
 			            DocumentRoleUpdate docRoleUpdate = docRoleService.newDocumentRoleUpdate(roleToCheck, docVersion);
-			            if (!roleToCheck.equals(APPROVER)) {
-				            docRoleUpdate.addUsers(VaultCollections.asList(userId));
-			            }
+			            // Add the user to the role, including Approver. The modern document
+			            // workflow's Approver participant control is constrained to the
+			            // approver__v role, so the user must already be in that role before
+			            // the workflow starts (the legacy workflow added them at start time).
+			            docRoleUpdate.addUsers(VaultCollections.asList(userId));
 			            if (checkedRole.getUsers().size() > 0) {
 			            	docRoleUpdate.removeUsers(checkedRole.getUsers());
 			            }
