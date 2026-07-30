@@ -1,10 +1,13 @@
 package com.veeva.vault.custom.triggers;
 
 import com.veeva.vault.sdk.api.data.RecordTriggerInfo;
+import com.veeva.vault.sdk.api.query.Query;
 import com.veeva.vault.sdk.api.query.QueryExecutionRequest;
 import com.veeva.vault.sdk.api.query.QueryExecutionResponse;
 import com.veeva.vault.sdk.api.query.QueryExecutionResult;
 import com.veeva.vault.sdk.api.query.QueryService;
+import com.veeva.vault.sdk.api.token.TokenRequest;
+import com.veeva.vault.sdk.api.token.TokenService;
 import com.veeva.vault.sdk.api.data.RecordEvent;
 import com.veeva.vault.sdk.api.data.RecordTrigger;
 import com.veeva.vault.sdk.api.data.RecordTriggerContext;
@@ -14,6 +17,7 @@ import java.util.Iterator;
 
 import com.veeva.vault.sdk.api.core.ServiceLocator;
 import com.veeva.vault.sdk.api.core.ValueType;
+import com.veeva.vault.sdk.api.core.VaultCollections;
 
 /**
  * This trigger demonstrates the Vault Java SDK QueryService. It uses the QueryService to:
@@ -48,12 +52,24 @@ public class vSDKQueryService implements RecordTrigger {
 	            }
 
 	            //Set the query up. Verify these queries using the API.
-	            //The QueryService.escapeValue(string) escapes VQL special characters for use within the query.
-	            String query = "select id, name__v, "
-	            			+ "(select id from vsdk_service_basics__cr where name__v like '" + queryService.escapeValue("Copy of: '" + name + "'") + " %') "
-	            			+ "from vsdk_service_basics__c where name__v like '" + name + "'";
+	            //The record name is supplied through a TokenRequest (Vault escapes String tokens and inserts the
+	            //quoted literal, so the token is NOT wrapped in quotes). The "Copy of" LIKE subquery keeps
+	            //queryService.escapeValue() because its trailing '%' wildcard must stay outside the escaped value.
+	            TokenService tokenService = ServiceLocator.locate(TokenService.class);
+	            TokenRequest tokenRequest = tokenService.newTokenRequestBuilder()
+	            		.withValue("Custom.record_name", name)
+	            		.build();
+
+	            Query query = queryService.newQueryBuilder()
+	            		.withSelect(VaultCollections.asList("id", "name__v",
+	            				"(select id from vsdk_service_basics__cr where name__v like '" + queryService.escapeValue("Copy of: '" + name + "'") + " %')"))
+	            		.withFrom("vsdk_service_basics__c")
+	            		.withWhere("name__v like ${Custom.record_name}")
+	            		.build();
+
 	            QueryExecutionRequest queryRequest = queryService.newQueryExecutionRequestBuilder()
-	            		.withQueryString(query)
+	            		.withQuery(query)
+	            		.withTokenRequest(tokenRequest)
 	            		.build();
 
 	            queryService.query(queryRequest)

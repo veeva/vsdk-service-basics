@@ -11,9 +11,12 @@ import com.veeva.vault.sdk.api.core.ServiceLocator;
 import com.veeva.vault.sdk.api.core.ValueType;
 import com.veeva.vault.sdk.api.core.VaultCollections;
 import com.veeva.vault.sdk.api.document.DocumentVersion;
+import com.veeva.vault.sdk.api.query.Query;
 import com.veeva.vault.sdk.api.query.QueryExecutionRequest;
 import com.veeva.vault.sdk.api.query.QueryExecutionResponse;
 import com.veeva.vault.sdk.api.query.QueryService;
+import com.veeva.vault.sdk.api.token.TokenRequest;
+import com.veeva.vault.sdk.api.token.TokenService;
 
 
 /******************************************************************************                                                     
@@ -54,10 +57,23 @@ public class vSDKVaultToVaultHttpCalloutAction implements DocumentAction {
     	httpParams.put("type", "vSDK HTTP Doctype");
     	httpParams.put("lifecycle", "vSDK HTTP Doctype Lifecycle");
     	
-    	String query = "select id, (select api_name__sys, remote_connection_id__sys from document_vsdk_connection__cr) from documents where version_id = '" + version_id + "'";
+    	// Supply the version ID through a TokenRequest and build the query with newQueryBuilder()
+    	// instead of concatenating the ID into a raw query String.
+    	TokenService tokenService = ServiceLocator.locate(TokenService.class);
+    	TokenRequest tokenRequest = tokenService.newTokenRequestBuilder()
+    			.withValue("Custom.version_id", version_id)
+    			.build();
+
+    	Query query = queryService.newQueryBuilder()
+    			.withSelect(VaultCollections.asList("id",
+    					"(select api_name__sys, remote_connection_id__sys from document_vsdk_connection__cr)"))
+    			.withFrom("documents")
+    			.withWhere("version_id = ${Custom.version_id}")
+    			.build();
 
     	QueryExecutionRequest queryRequest = queryService.newQueryExecutionRequestBuilder()
-    			.withQueryString(query)
+    			.withQuery(query)
+    			.withTokenRequest(tokenRequest)
     			.build();
 
     	queryService.query(queryRequest)

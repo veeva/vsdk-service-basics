@@ -10,6 +10,8 @@ import com.veeva.vault.sdk.api.core.VaultCollections;
 import com.veeva.vault.sdk.api.data.Record;
 import com.veeva.vault.sdk.api.document.DocumentService;
 import com.veeva.vault.sdk.api.document.DocumentVersion;
+import com.veeva.vault.sdk.api.token.TokenRequest;
+import com.veeva.vault.sdk.api.token.TokenService;
 import com.veeva.vault.sdk.api.http.FormHttpRequest;
 import com.veeva.vault.sdk.api.http.HttpMethod;
 import com.veeva.vault.sdk.api.http.HttpResponseBodyValueType;
@@ -399,13 +401,20 @@ public class vSDKHttpCallouts {
 		//The configured connection provides the full DNS name.
 		//For the path, you only need to append the API endpoint after the DNS.
 		//The query endpoint takes a POST where the BODY is the query itself.
-		String query = "select remote_vault_id__sys from connection__sys where id contains ('" + remoteConnectionId + "')";
+		// Supply the remote connection ID as an HTTP token instead of concatenating it into the body.
+		TokenService tokenService = ServiceLocator.locate(TokenService.class);
+		TokenRequest tokenRequest = tokenService.newTokenRequestBuilder()
+				.withValue("Custom.remote_connection_id", remoteConnectionId)
+				.build();
+		String query = "select remote_vault_id__sys from connection__sys where id contains ('${Custom.remote_connection_id}')";
 		FormHttpRequest request = httpService.newHttpRequestBuilder()
 				.withConnectionName(connection)
 				.withMethod(HttpMethod.POST)
 				.withPath("/api/v19.1/query")
 				.withHeader("Content-Type", "application/x-www-form-urlencoded")
 				.withBodyParam("q", query)
+				.withTokenRequest(tokenRequest)
+				.withResolveTokens(true)
 				.build();
 
 		//Send the request to the target vault. The response received back should be a JSON response.
