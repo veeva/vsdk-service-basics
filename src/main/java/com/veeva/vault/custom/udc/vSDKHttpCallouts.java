@@ -20,6 +20,8 @@ import com.veeva.vault.sdk.api.json.JsonArray;
 import com.veeva.vault.sdk.api.json.JsonData;
 import com.veeva.vault.sdk.api.json.JsonObject;
 import com.veeva.vault.sdk.api.json.JsonValueType;
+import com.veeva.vault.sdk.api.query.Query;
+import com.veeva.vault.sdk.api.query.QueryService;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -91,8 +93,8 @@ public class vSDKHttpCallouts {
         httpService.sendRequest(request, HttpResponseBodyValueType.JSONDATA)
             .onSuccess(httpResponse -> {
                 int responseCode = httpResponse.getHttpStatusCode();
-                logService.info("RESPONSE: " + responseCode);
-                logService.info("RESPONSE: " + httpResponse.getResponseBody());
+                logService.info("RESPONSE: {}", responseCode);
+                logService.info("RESPONSE: {}", httpResponse.getResponseBody());
 
 				JsonData response = httpResponse.getResponseBody();
 
@@ -101,7 +103,7 @@ public class vSDKHttpCallouts {
 					String responseStatus = response.getJsonObject().getValue("responseStatus", JsonValueType.STRING);
 
 					if (responseStatus.equals("SUCCESS")) {
-						logService.info("Starting HTTP Workflow for document - " + String.join("_", version_id));
+						logService.info("Starting HTTP Workflow for document - {}", String.join("_", version_id));
 						if (response.getJsonObject().contains("data")) {
 							JsonObject data = response.getJsonObject().getValue("data", JsonValueType.OBJECT);
 							if (data.contains("workflow_id")) {
@@ -128,7 +130,7 @@ public class vSDKHttpCallouts {
             })
             .onError(httpOperationError -> {
                 int responseCode = httpOperationError.getHttpResponse().getHttpStatusCode();
-                logService.info("RESPONSE: " + responseCode);
+                logService.info("RESPONSE: {}", responseCode);
                 logService.info(httpOperationError.getMessage());
                 logService.info(httpOperationError.getHttpResponse().getResponseBody());
             })
@@ -167,8 +169,8 @@ public class vSDKHttpCallouts {
         httpService.sendRequest(request, HttpResponseBodyValueType.JSONDATA)
             .onSuccess(httpResponse -> {
                 int responseCode = httpResponse.getHttpStatusCode();
-                logService.info("RESPONSE: " + responseCode);
-                logService.info("RESPONSE: " + httpResponse.getResponseBody());
+                logService.info("RESPONSE: {}", responseCode);
+                logService.info("RESPONSE: {}", httpResponse.getResponseBody());
 
 				JsonData response = httpResponse.getResponseBody();
 
@@ -176,7 +178,7 @@ public class vSDKHttpCallouts {
 					String responseStatus = response.getJsonObject().getValue("responseStatus", JsonValueType.STRING);
 
 					if (responseStatus.equals("SUCCESS")) {
-						logService.info("Verifying Lifecycle Actions for document - " + String.join("_", version_id));
+						logService.info("Verifying Lifecycle Actions for document - {}", String.join("_", version_id));
 
 						JsonArray documentWorkflows = response.getJsonObject().getValue("data", JsonValueType.ARRAY);
 
@@ -212,7 +214,7 @@ public class vSDKHttpCallouts {
             })
             .onError(httpOperationError -> {
                 int responseCode = httpOperationError.getHttpResponse().getHttpStatusCode();
-                logService.info("RESPONSE: " + responseCode);
+                logService.info("RESPONSE: {}", responseCode);
                 logService.info(httpOperationError.getMessage());
                 logService.info(httpOperationError.getHttpResponse().getResponseBody());
             })
@@ -280,7 +282,7 @@ public class vSDKHttpCallouts {
   							          + data.getValue("pantone_value",JsonValueType.STRING);
 
   					logService.info("External HTTP Request: SUCCESS");
-  					logService.info("External HTTP Data: " + externalId);
+  					logService.info("External HTTP Data: {}", externalId);
 
   					DocumentVersion docVersion = documentService.newDocumentWithId(docId);
   					docVersion.setValue("vsdk_http_external_id__c", externalId);
@@ -349,8 +351,8 @@ public class vSDKHttpCallouts {
         httpService.sendRequest(request, HttpResponseBodyValueType.JSONDATA)
             .onSuccess(httpResponse -> {
                 int responseCode = httpResponse.getHttpStatusCode();
-                logService.info("RESPONSE: " + responseCode);
-                logService.info("RESPONSE: " + httpResponse.getResponseBody());
+                logService.info("RESPONSE: {}", responseCode);
+                logService.info("RESPONSE: {}", httpResponse.getResponseBody());
 
                 JsonData response = httpResponse.getResponseBody();
 
@@ -379,7 +381,7 @@ public class vSDKHttpCallouts {
             })
             .onError(httpOperationError -> {
                 int responseCode = httpOperationError.getHttpResponse().getHttpStatusCode();
-                logService.info("RESPONSE: " + responseCode);
+                logService.info("RESPONSE: {}", responseCode);
                 logService.info(httpOperationError.getMessage());
                 logService.info(httpOperationError.getHttpResponse().getResponseBody());
                 throw new RollbackException("OPERATION_NOT_ALLOWED", "HttpService Error on Create CrossLink: " + httpOperationError.getMessage());
@@ -406,13 +408,20 @@ public class vSDKHttpCallouts {
 		TokenRequest tokenRequest = tokenService.newTokenRequestBuilder()
 				.withValue("Custom.remote_connection_id", remoteConnectionId)
 				.build();
-		String query = "select remote_vault_id__sys from connection__sys where id contains ('${Custom.remote_connection_id}')";
+		// Build the callout body VQL with the QueryBuilder. getQueryString() leaves the
+		// ${Custom.x} token unresolved so the HTTP request's own token mechanism resolves it.
+		QueryService queryService = ServiceLocator.locate(QueryService.class);
+		Query query = queryService.newQueryBuilder()
+				.withSelect(VaultCollections.asList("remote_vault_id__sys"))
+				.withFrom("connection__sys")
+				.withWhere("id contains ('${Custom.remote_connection_id}')")
+				.build();
 		FormHttpRequest request = httpService.newHttpRequestBuilder()
 				.withConnectionName(connection)
 				.withMethod(HttpMethod.POST)
 				.withPath("/api/v19.1/query")
 				.withHeader("Content-Type", "application/x-www-form-urlencoded")
-				.withBodyParam("q", query)
+				.withBodyParam("q", query.getQueryString())
 				.withTokenRequest(tokenRequest)
 				.withResolveTokens(true)
 				.build();
@@ -476,7 +485,7 @@ public class vSDKHttpCallouts {
 		})
 		.onError(httpOperationError -> {
 			  int responseCode = httpOperationError.getHttpResponse().getHttpStatusCode();
-              logService.info("RESPONSE: " + responseCode);
+              logService.info("RESPONSE: {}", responseCode);
               logService.info(httpOperationError.getMessage());
               logService.info(httpOperationError.getHttpResponse().getResponseBody());
               throw new RollbackException("OPERATION_NOT_ALLOWED", "HttpService Error Vault to Vault Query: " + httpOperationError.getMessage());
