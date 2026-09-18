@@ -5,6 +5,7 @@ import com.veeva.vault.sdk.api.query.Query;
 import com.veeva.vault.sdk.api.query.QueryExecutionRequest;
 import com.veeva.vault.sdk.api.query.QueryExecutionResponse;
 import com.veeva.vault.sdk.api.query.QueryExecutionResult;
+import com.veeva.vault.sdk.api.query.QueryOperationError;
 import com.veeva.vault.sdk.api.query.QueryService;
 import com.veeva.vault.sdk.api.token.TokenRequest;
 import com.veeva.vault.sdk.api.token.TokenService;
@@ -15,6 +16,8 @@ import com.veeva.vault.sdk.api.data.RecordChange;
 
 import java.util.Iterator;
 
+import com.veeva.vault.sdk.api.core.LogService;
+import com.veeva.vault.sdk.api.core.RollbackException;
 import com.veeva.vault.sdk.api.core.ServiceLocator;
 import com.veeva.vault.sdk.api.core.ValueType;
 import com.veeva.vault.sdk.api.core.VaultCollections;
@@ -38,6 +41,7 @@ public class vSDKQueryService implements RecordTrigger {
 
     	RecordEvent recordEvent = recordTriggerContext.getRecordEvent();
     	QueryService queryService = ServiceLocator.locate(QueryService.class);
+    	LogService logService = ServiceLocator.locate(LogService.class);
 
     	if (recordEvent.toString().equals("BEFORE_INSERT")) {
 	        for (RecordChange inputRecord : recordTriggerContext.getRecordChanges()) {
@@ -84,6 +88,16 @@ public class vSDKQueryService implements RecordTrigger {
 	            		    if (queryResponse.getResultCount() == 0) {
 	            		        inputRecord.getNew().setValue("name__v", name);
 	            		    }
+	            		})
+	            		.onError(queryOperationError -> {
+	            		    //If the VQL query fails, log the error details and roll back the transaction so the
+	            		    //record is not inserted in an inconsistent state.
+	            		    logService.error("Query failed [{}]: {}",
+	            		            queryOperationError.getQueryOperationErrorType(),
+	            		            queryOperationError.getMessage());
+	            		    logService.error("Failed query: {}", queryOperationError.getQueryString());
+	            		    throw new RollbackException("OPERATION_NOT_ALLOWED",
+	            		            "Failed to query for existing records: " + queryOperationError.getMessage());
 	            		})
 	            		.execute();
 	        }
