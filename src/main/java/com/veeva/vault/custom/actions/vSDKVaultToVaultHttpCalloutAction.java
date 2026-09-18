@@ -7,11 +7,15 @@ import com.veeva.vault.custom.udc.vSDKHttpCallouts;
 import com.veeva.vault.sdk.api.action.DocumentAction;
 import com.veeva.vault.sdk.api.action.DocumentActionContext;
 import com.veeva.vault.sdk.api.action.DocumentActionInfo;
+import com.veeva.vault.sdk.api.core.LogService;
+import com.veeva.vault.sdk.api.core.RollbackException;
 import com.veeva.vault.sdk.api.core.ServiceLocator;
 import com.veeva.vault.sdk.api.core.ValueType;
 import com.veeva.vault.sdk.api.core.VaultCollections;
 import com.veeva.vault.sdk.api.document.DocumentVersion;
-import com.veeva.vault.sdk.api.query.QueryResponse;
+import com.veeva.vault.sdk.api.query.QueryExecutionRequest;
+import com.veeva.vault.sdk.api.query.QueryExecutionResponse;
+import com.veeva.vault.sdk.api.query.QueryOperationError;
 import com.veeva.vault.sdk.api.query.QueryService;
 
 
@@ -40,6 +44,7 @@ public class vSDKVaultToVaultHttpCalloutAction implements DocumentAction {
     public void execute(DocumentActionContext documentActionContext) {
 
     	QueryService queryService = ServiceLocator.locate(QueryService.class);
+    	LogService logService = ServiceLocator.locate(LogService.class);
     	DocumentVersion docVersion = documentActionContext.getDocumentVersions().get(0);
     	Map<String, String> httpParams = VaultCollections.newMap();
     	List<String> connections = VaultCollections.newList();
@@ -55,17 +60,33 @@ public class vSDKVaultToVaultHttpCalloutAction implements DocumentAction {
     	
     	String query = "select id, (select api_name__sys, remote_connection_id__sys from document_vsdk_connection__cr) from documents where version_id = '" + version_id + "'";
 
-    	QueryResponse queryResponse = queryService.query(query);
-    	
-    	queryResponse.streamResults().forEach(qr -> {
-            QueryResponse subQueryResponse = qr.getSubqueryResponse("document_vsdk_connection__cr");
-            
-            subQueryResponse.streamResults().forEach(subqr -> {
-            	String connection = subqr.getValue("api_name__sys", ValueType.STRING);
-            	String remoteConnectionId = subqr.getValue("remote_connection_id__sys", ValueType.STRING);
-            	vSDKHttpCallouts.v2vHttpQuery(httpParams, connection, remoteConnectionId);
-            });
-        });
+    	QueryExecutionRequest queryRequest = queryService.newQueryExecutionRequestBuilder()
+    			.withQueryString(query)
+    			.build();
+
+    	queryService.query(queryRequest)
+    			.onSuccess(queryResponse -> {
+    	    		queryResponse.streamResults().forEach(qr -> {
+    	                QueryExecutionResponse subQueryResponse = qr.getSubqueryResponse("document_vsdk_connection__cr");
+
+    	                subQueryResponse.streamResults().forEach(subqr -> {
+    	                	String connection = subqr.getValue("api_name__sys", ValueType.STRING);
+    	                	String remoteConnectionId = subqr.getValue("remote_connection_id__sys", ValueType.STRING);
+    	                	vSDKHttpCallouts.v2vHttpQuery(httpParams, connection, remoteConnectionId);
+    	                });
+    	            });
+    			})
+    			.onError(queryOperationError -> {
+    			    //If the VQL query fails, log the error details and roll back so no partial
+    			    //Vault-to-Vault callout is attempted against an incomplete result set.
+    			    logService.error("Query failed [{}]: {}",
+    			            queryOperationError.getQueryOperationErrorType(),
+    			            queryOperationError.getMessage());
+    			    logService.error("Failed query: {}", queryOperationError.getQueryString());
+    			    throw new RollbackException("OPERATION_NOT_ALLOWED",
+    			            "Failed to query document connections: " + queryOperationError.getMessage());
+    			})
+    			.execute();
     }
 
 	public boolean isExecutable(DocumentActionContext documentActionContext) {
